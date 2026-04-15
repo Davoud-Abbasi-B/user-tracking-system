@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+.env.local
+npm-debug.log*
+.server.*.log
+.DS_Store
+.codex_pdf_text/
+User Tracking System.txt

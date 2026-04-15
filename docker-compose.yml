@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tracking_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: tracking
+      POSTGRES_PASSWORD: tracking
+      POSTGRES_DB: tracking
+    ports:
+      - "5433:5432"
+    volumes:
+      - tracking_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tracking -d tracking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  tracking_postgres_data:
