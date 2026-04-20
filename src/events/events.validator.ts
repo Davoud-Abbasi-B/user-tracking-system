@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../database/database.service';
+import { AuthContext } from '../auth/auth-context';
 import { EventIngestRequestDto } from './dto/event-ingest.dto';
+import { RegistryCacheService } from './registry-cache.service';
 
 export type ValidationIssue = {
   code: string;
@@ -17,9 +18,12 @@ export type RegistryEvent = {
 
 @Injectable()
 export class EventsValidator {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(private readonly registryCacheService: RegistryCacheService) {}
 
-  async validate(payload: EventIngestRequestDto): Promise<{ issues: ValidationIssue[]; registryEvent?: RegistryEvent }> {
+  async validate(
+    payload: EventIngestRequestDto,
+    authContext: AuthContext
+  ): Promise<{ issues: ValidationIssue[]; registryEvent?: RegistryEvent }> {
     const issues: ValidationIssue[] = [];
 
     if (!payload || typeof payload !== 'object') {
@@ -38,7 +42,8 @@ export class EventsValidator {
     this.validateIdentity(payload, issues);
     this.validateParameters(payload, issues);
     this.validateMetadata(payload, issues);
-    this.validateCallback(payload, issues);
+    this.validateTrustBoundary(payload, authContext, issues);
+    this.validateCallback(payload, authContext, issues);
 
     const registryEvent = await this.findRegistryEvent(payload);
     this.validateRegistry(payload, registryEvent, issues);
@@ -119,8 +124,27 @@ export class EventsValidator {
     }
   }
 
-  private validateCallback(payload: EventIngestRequestDto, issues: ValidationIssue[]) {
+  private validateTrustBoundary(payload: EventIngestRequestDto, authContext: AuthContext, issues: ValidationIssue[]) {
+    if (authContext.role === 'backend') {
+      return;
+    }
+
+    if (payload.platform === 'backend') {
+      issues.push({ code: 'SEC-001', severity: 'error', message: 'client API key cannot submit backend platform events' });
+    }
+
+    if (payload.metadata?.producer === 'backend' || payload.metadata?.source_of_truth === 'backend') {
+      issues.push({ code: 'SEC-002', severity: 'error', message: 'client API key cannot submit backend metadata fields' });
+    }
+  }
+
+  private validateCallback(payload: EventIngestRequestDto, authContext: AuthContext, issues: ValidationIssue[]) {
     if (!payload.event_name?.startsWith('payment_callback_')) {
+      return;
+    }
+
+    if (authContext.role !== 'backend') {
+      issues.push({ code: 'SEC-003', severity: 'error', message: 'payment callback events require backend API key' });
       return;
     }
 
@@ -137,7 +161,7 @@ export class EventsValidator {
     }
 
     if (!this.isNonEmptyString(metadata.idempotency_key)) {
-      issues.push({ code: 'VR-603', severity: 'warning', message: 'callback should provide idempotency_key' });
+      issues.push({ code: 'VR-603', severity: 'error', message: 'callback must provide idempotency_key' });
     }
 
     if (payload.event_name.endsWith('_fail')) {
@@ -163,17 +187,7 @@ export class EventsValidator {
       return undefined;
     }
 
-    const result = await this.databaseService.query<RegistryEvent>(
-      `
-        SELECT event_name, producer, source_of_truth, is_active
-        FROM tracking_event_registry
-        WHERE product_name = $1 AND event_name = $2 AND platform = $3
-        LIMIT 1
-      `,
-      [payload.product_name, payload.event_name, payload.platform]
-    );
-
-    return result.rows[0];
+    return this.registryCacheService.find(payload.product_name, payload.event_name, payload.platform);
   }
 
   private validateRegistry(payload: EventIngestRequestDto, registryEvent: RegistryEvent | undefined, issues: ValidationIssue[]) {

@@ -1,5 +1,6 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, Req } from '@nestjs/common';
 import { ApiBadRequestResponse, ApiBody, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import { RequestWithAuth } from '../auth/auth-context';
 import { EventIngestRequestDto } from './dto/event-ingest.dto';
 import { EventIngestResponseDto } from './dto/event-response.dto';
 import { EventsService } from './events.service';
@@ -81,7 +82,7 @@ export class EventsController {
   })
   @ApiCreatedResponse({ type: EventIngestResponseDto })
   @ApiBadRequestResponse({ description: 'Invalid event payload.' })
-  ingest(@Body() payload: EventIngestRequestDto): Promise<EventIngestResponseDto> {
-    return this.eventsService.ingest(payload);
+  ingest(@Body() payload: EventIngestRequestDto, @Req() request: RequestWithAuth): Promise<EventIngestResponseDto> {
+    return this.eventsService.ingest(payload, request.authContext!);
   }
 }

@@ -25,6 +25,7 @@ async function bootstrap() {
     .setDescription('Event ingestion API for tracking user journeys, attribution, and payment callbacks.')
     .setVersion('0.1.0')
     .addApiKey({ type: 'apiKey', name: 'x-api-key', in: 'header' }, 'api-key')
+    .addSecurityRequirements('api-key')
     .build();
   const document = SwaggerModule.createDocument(app, documentConfig);
   SwaggerModule.setup('docs', app, document);

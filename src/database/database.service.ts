@@ -12,7 +12,10 @@ export class DatabaseService implements OnModuleDestroy {
       port: Number(this.configService.get<string>('DATABASE_PORT') ?? 5432),
       user: this.configService.get<string>('DATABASE_USER') ?? 'tracking',
       password: this.configService.get<string>('DATABASE_PASSWORD') ?? 'tracking',
-      database: this.configService.get<string>('DATABASE_NAME') ?? 'tracking'
+      database: this.configService.get<string>('DATABASE_NAME') ?? 'tracking',
+      max: Number(this.configService.get<string>('DATABASE_POOL_MAX') ?? 20),
+      idleTimeoutMillis: Number(this.configService.get<string>('DATABASE_IDLE_TIMEOUT_MS') ?? 30_000),
+      connectionTimeoutMillis: Number(this.configService.get<string>('DATABASE_CONNECTION_TIMEOUT_MS') ?? 2_000)
     });
   }
 

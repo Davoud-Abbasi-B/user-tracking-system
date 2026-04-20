@@ -1,5 +1,8 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { AuthContext } from '../auth/auth-context';
 import { DatabaseService } from '../database/database.service';
+import { MetricsService } from '../metrics/metrics.service';
 import { EventIngestRequestDto } from './dto/event-ingest.dto';
 import { EventIngestResponseDto } from './dto/event-response.dto';
 import { EventsValidator, ValidationIssue } from './events.validator';
@@ -16,18 +19,40 @@ type NormalizedEvent = {
 
 @Injectable()
 export class EventsService {
+  private readonly sensitiveKeys = [
+    'password',
+    'token',
+    'access_token',
+    'refresh_token',
+    'authorization',
+    'cookie',
+    'mobile',
+    'phone',
+    'national_id',
+    'nationalcode',
+    'card_number',
+    'pan'
+  ];
+
   constructor(
+    private readonly configService: ConfigService,
     private readonly databaseService: DatabaseService,
-    private readonly eventsValidator: EventsValidator
+    private readonly eventsValidator: EventsValidator,
+    private readonly metricsService: MetricsService
   ) {}
 
-  async ingest(payload: EventIngestRequestDto): Promise<EventIngestResponseDto> {
-    const { issues } = await this.eventsValidator.validate(payload);
+  async ingest(payload: EventIngestRequestDto, authContext: AuthContext): Promise<EventIngestResponseDto> {
+    const startedAt = performance.now();
+    const { issues } = await this.eventsValidator.validate(payload, authContext);
+    this.validateRawPayloadSafety(payload, issues);
+
     const errors = issues.filter((issue) => issue.severity === 'error');
     const warnings = issues.filter((issue) => issue.severity === 'warning');
 
     if (errors.length > 0) {
       await this.storeInvalidEvent(payload, errors);
+      this.metricsService.increment('tracking_events_ingest_total', { status: 'invalid', event_name: payload?.event_name ?? 'unknown' });
+      this.metricsService.observe('tracking_events_ingest_latency_ms', performance.now() - startedAt, { status: 'invalid' });
       throw new BadRequestException({
         success: false,
         error_code: errors[0].code,
@@ -40,8 +65,12 @@ export class EventsService {
 
     try {
       await this.storeAcceptedEvent(payload, normalized, warnings);
-      await this.upsertSession(payload, normalized);
-      await this.upsertIdentityLink(payload);
+      if (this.isEnabled('TRACKING_SESSION_UPSERT_ENABLED')) {
+        await this.upsertSession(payload, normalized);
+      }
+      if (this.isEnabled('TRACKING_IDENTITY_LINK_UPSERT_ENABLED')) {
+        await this.upsertIdentityLink(payload);
+      }
     } catch (error) {
       if (this.isUniqueViolation(error)) {
         throw new ConflictException({
@@ -53,6 +82,14 @@ export class EventsService {
       throw error;
     }
 
+    this.metricsService.increment('tracking_events_ingest_total', {
+      status: warnings.length > 0 ? 'warning' : 'valid',
+      event_name: payload.event_name
+    });
+    this.metricsService.observe('tracking_events_ingest_latency_ms', performance.now() - startedAt, {
+      status: warnings.length > 0 ? 'warning' : 'valid'
+    });
+
     return {
       success: true,
       event_id: normalized.eventId,
@@ -60,6 +97,45 @@ export class EventsService {
       received_at: normalized.receivedAt,
       warnings: warnings.length > 0 ? warnings.map((warning) => `${warning.code}: ${warning.message}`) : undefined
     };
+  }
+
+  private validateRawPayloadSafety(payload: EventIngestRequestDto, issues: ValidationIssue[]) {
+    const rawPayload = JSON.stringify(payload ?? {});
+    const maxBytes = Number(this.configService.get<string>('TRACKING_RAW_PAYLOAD_MAX_BYTES') ?? 131_072);
+
+    if (Buffer.byteLength(rawPayload, 'utf8') > maxBytes) {
+      issues.push({ code: 'SEC-101', severity: 'error', message: 'raw payload is too large' });
+      return;
+    }
+
+    const sensitivePath = this.findSensitiveKey(payload);
+    if (sensitivePath) {
+      issues.push({
+        code: 'SEC-102',
+        severity: 'error',
+        message: `raw payload contains forbidden sensitive key: ${sensitivePath}`
+      });
+    }
+  }
+
+  private findSensitiveKey(value: unknown, path: string[] = []): string | undefined {
+    if (!value || typeof value !== 'object') {
+      return undefined;
+    }
+
+    for (const [key, nestedValue] of Object.entries(value)) {
+      const normalizedKey = key.toLowerCase().replace(/[-\s]/g, '_');
+      if (this.sensitiveKeys.includes(normalizedKey)) {
+        return [...path, key].join('.');
+      }
+
+      const nestedPath = this.findSensitiveKey(nestedValue, [...path, key]);
+      if (nestedPath) {
+        return nestedPath;
+      }
+    }
+
+    return undefined;
   }
 
   private normalize(payload: EventIngestRequestDto): NormalizedEvent {
@@ -264,5 +340,9 @@ export class EventsService {
 
   private isUniqueViolation(error: unknown): boolean {
     return typeof error === 'object' && error !== null && 'code' in error && error.code === '23505';
+  }
+
+  private isEnabled(name: string): boolean {
+    return this.configService.get<string>(name)?.toLowerCase() === 'true';
   }
 }

@@ -9,7 +9,8 @@
     "start:dev": "nest start --watch",
     "lint": "eslint \"{src,scripts}/**/*.ts\"",
     "migration:run": "ts-node -r tsconfig-paths/register scripts/run-migrations.ts",
-    "seed": "ts-node -r tsconfig-paths/register scripts/seed-registry.ts"
+    "seed": "ts-node -r tsconfig-paths/register scripts/seed-registry.ts",
+    "load:test": "ts-node -r tsconfig-paths/register scripts/load-test.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

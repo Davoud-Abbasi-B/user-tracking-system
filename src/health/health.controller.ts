@@ -1,6 +1,7 @@
 import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger';
 import { DatabaseService } from '../database/database.service';
+import { Public } from '../auth/public.decorator';
 
 @ApiTags('health')
 @Controller()
@@ -8,6 +9,7 @@ export class HealthController {
   constructor(private readonly databaseService: DatabaseService) {}
 
   @Get('health')
+  @Public()
   @ApiOkResponse({ description: 'Service is alive.' })
   health() {
     return {
@@ -18,6 +20,7 @@ export class HealthController {
   }
 
   @Get('ready')
+  @Public()
   @ApiOkResponse({ description: 'Service dependencies are ready.' })
   async ready() {
     try {
