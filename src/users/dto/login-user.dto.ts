@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { RequestIdentityDto } from '../../common/dto/envelope.dto';
 
 export class LoginAttributionDto {
   @ApiPropertyOptional({ example: 'Esfand1404_newservice_promotion', nullable: true })
@@ -69,4 +70,17 @@ export class LoginUserRequestDto {
   @IsOptional()
   @IsObject()
   metadata?: LoginMetadataDto;
+}
+
+export class LoginUserEnvelopeRequestDto {
+  @ApiPropertyOptional({ type: RequestIdentityDto })
+  @IsOptional()
+  @ValidateNested()
+  @IsObject()
+  Identity?: RequestIdentityDto;
+
+  @ApiProperty({ type: LoginUserRequestDto })
+  @ValidateNested()
+  @IsObject()
+  Parameters!: LoginUserRequestDto;
 }
