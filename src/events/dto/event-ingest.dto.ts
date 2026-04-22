@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { RequestIdentityDto } from '../../common/dto/envelope.dto';
 
 export class UserContextDto {
   @ApiPropertyOptional({ example: 'hashed_phone_value' })
@@ -105,4 +106,17 @@ export class EventIngestRequestDto {
   @IsOptional()
   @IsObject()
   metadata?: EventMetadataDto;
+}
+
+export class EventEnvelopeRequestDto {
+  @ApiPropertyOptional({ type: RequestIdentityDto })
+  @IsOptional()
+  @ValidateNested()
+  @IsObject()
+  Identity?: RequestIdentityDto;
+
+  @ApiProperty({ type: EventIngestRequestDto })
+  @ValidateNested()
+  @IsObject()
+  Parameters!: EventIngestRequestDto;
 }

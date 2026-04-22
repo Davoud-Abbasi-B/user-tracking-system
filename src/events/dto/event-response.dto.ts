@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { EventIngestResponseStatusDto } from '../../common/dto/envelope.dto';
 
 export class EventIngestResponseDto {
   @ApiProperty({ example: true })
@@ -15,4 +16,12 @@ export class EventIngestResponseDto {
 
   @ApiPropertyOptional({ example: ['VR-604: callback fail event is missing error_code'] })
   warnings?: string[];
+}
+
+export class EventEnvelopeResponseDto {
+  @ApiProperty({ type: EventIngestResponseStatusDto })
+  Status!: EventIngestResponseStatusDto;
+
+  @ApiProperty({ type: EventIngestResponseDto })
+  Parameters!: EventIngestResponseDto;
 }

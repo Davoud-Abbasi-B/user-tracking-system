@@ -41,16 +41,16 @@ export class EventsService {
     private readonly metricsService: MetricsService
   ) {}
 
-  async ingest(payload: EventIngestRequestDto, authContext: AuthContext): Promise<EventIngestResponseDto> {
+  async ingest(payload: EventIngestRequestDto, authContext: AuthContext, rawEnvelope?: unknown): Promise<EventIngestResponseDto> {
     const startedAt = performance.now();
     const { issues } = await this.eventsValidator.validate(payload, authContext);
-    this.validateRawPayloadSafety(payload, issues);
+    this.validateRawPayloadSafety(rawEnvelope ?? payload, issues);
 
     const errors = issues.filter((issue) => issue.severity === 'error');
     const warnings = issues.filter((issue) => issue.severity === 'warning');
 
     if (errors.length > 0) {
-      await this.storeInvalidEvent(payload, errors);
+      await this.storeInvalidEvent(payload, errors, rawEnvelope ?? payload);
       this.metricsService.increment('tracking_events_ingest_total', { status: 'invalid', event_name: payload?.event_name ?? 'unknown' });
       this.metricsService.observe('tracking_events_ingest_latency_ms', performance.now() - startedAt, { status: 'invalid' });
       throw new BadRequestException({
@@ -64,7 +64,7 @@ export class EventsService {
     const normalized = this.normalize(payload);
 
     try {
-      await this.storeAcceptedEvent(payload, normalized, warnings);
+      await this.storeAcceptedEvent(payload, normalized, warnings, rawEnvelope ?? payload);
       if (this.isEnabled('TRACKING_SESSION_UPSERT_ENABLED')) {
         await this.upsertSession(payload, normalized);
       }
@@ -99,7 +99,7 @@ export class EventsService {
     };
   }
 
-  private validateRawPayloadSafety(payload: EventIngestRequestDto, issues: ValidationIssue[]) {
+  private validateRawPayloadSafety(payload: unknown, issues: ValidationIssue[]) {
     const rawPayload = JSON.stringify(payload ?? {});
     const maxBytes = Number(this.configService.get<string>('TRACKING_RAW_PAYLOAD_MAX_BYTES') ?? 131_072);
 
@@ -125,17 +125,23 @@ export class EventsService {
 
     for (const [key, nestedValue] of Object.entries(value)) {
       const normalizedKey = key.toLowerCase().replace(/[-\s]/g, '_');
-      if (this.sensitiveKeys.includes(normalizedKey)) {
+      const fullPath = [...path, key];
+
+      if (this.sensitiveKeys.includes(normalizedKey) && !this.isAllowedEnvelopeToken(fullPath)) {
         return [...path, key].join('.');
       }
 
-      const nestedPath = this.findSensitiveKey(nestedValue, [...path, key]);
+      const nestedPath = this.findSensitiveKey(nestedValue, fullPath);
       if (nestedPath) {
         return nestedPath;
       }
     }
 
     return undefined;
+  }
+
+  private isAllowedEnvelopeToken(path: string[]): boolean {
+    return path.length === 2 && path[0] === 'Identity' && path[1] === 'Token';
   }
 
   private normalize(payload: EventIngestRequestDto): NormalizedEvent {
@@ -162,7 +168,8 @@ export class EventsService {
   private async storeAcceptedEvent(
     payload: EventIngestRequestDto,
     normalized: NormalizedEvent,
-    warnings: ValidationIssue[]
+    warnings: ValidationIssue[],
+    rawPayload: unknown
   ) {
     await this.databaseService.query(
       `
@@ -225,12 +232,12 @@ export class EventsService {
         warnings.length > 0 ? 'warning' : 'valid',
         warnings.length > 0 ? JSON.stringify(warnings) : null,
         JSON.stringify(payload.parameters ?? {}),
-        JSON.stringify(payload)
+        JSON.stringify(rawPayload ?? {})
       ]
     );
   }
 
-  private async storeInvalidEvent(payload: EventIngestRequestDto, errors: ValidationIssue[]) {
+  private async storeInvalidEvent(payload: EventIngestRequestDto, errors: ValidationIssue[], rawPayload: unknown) {
     await this.databaseService.query(
       `
         INSERT INTO tracking_invalid_events (
@@ -251,7 +258,7 @@ export class EventsService {
         errors[0].code,
         errors[0].message,
         JSON.stringify(errors),
-        JSON.stringify(payload ?? {})
+        JSON.stringify(rawPayload ?? {})
       ]
     );
   }

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { LoginUserResponseStatusDto } from '../../common/dto/envelope.dto';
 
 export class LoginUserResponseDto {
   @ApiProperty({ example: true })
@@ -15,4 +16,12 @@ export class LoginUserResponseDto {
 
   @ApiProperty({ example: 2 })
   login_count!: number;
+}
+
+export class LoginUserEnvelopeResponseDto {
+  @ApiProperty({ type: LoginUserResponseStatusDto })
+  Status!: LoginUserResponseStatusDto;
+
+  @ApiProperty({ type: LoginUserResponseDto })
+  Parameters!: LoginUserResponseDto;
 }
