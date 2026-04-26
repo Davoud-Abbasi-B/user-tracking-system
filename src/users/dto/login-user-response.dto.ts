@@ -19,9 +19,9 @@ export class LoginUserResponseDto {
 }
 
 export class LoginUserEnvelopeResponseDto {
-  @ApiProperty({ type: LoginUserResponseStatusDto })
+  @ApiProperty({ type: () => LoginUserResponseStatusDto })
   Status!: LoginUserResponseStatusDto;
 
-  @ApiProperty({ type: LoginUserResponseDto })
+  @ApiProperty({ type: () => LoginUserResponseDto })
   Parameters!: LoginUserResponseDto;
 }

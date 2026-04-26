@@ -61,25 +61,25 @@ export class LoginUserRequestDto {
   @IsNotEmpty()
   login_time!: string;
 
-  @ApiPropertyOptional({ type: LoginAttributionDto })
+  @ApiPropertyOptional({ type: () => LoginAttributionDto })
   @IsOptional()
   @IsObject()
   attribution?: LoginAttributionDto;
 
-  @ApiPropertyOptional({ type: LoginMetadataDto })
+  @ApiPropertyOptional({ type: () => LoginMetadataDto })
   @IsOptional()
   @IsObject()
   metadata?: LoginMetadataDto;
 }
 
 export class LoginUserEnvelopeRequestDto {
-  @ApiPropertyOptional({ type: RequestIdentityDto })
+  @ApiPropertyOptional({ type: () => RequestIdentityDto })
   @IsOptional()
   @ValidateNested()
   @IsObject()
   Identity?: RequestIdentityDto;
 
-  @ApiProperty({ type: LoginUserRequestDto })
+  @ApiProperty({ type: () => LoginUserRequestDto })
   @ValidateNested()
   @IsObject()
   Parameters!: LoginUserRequestDto;

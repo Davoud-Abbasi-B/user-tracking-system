@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsObject, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class RequestIdentityDto {
   @ApiPropertyOptional({ example: 'E61165CBE2B74373B90EBA23C6805412', nullable: true })
@@ -45,30 +45,9 @@ export class ErrorResponseStatusDto {
 }
 
 export class ErrorEnvelopeResponseDto {
-  @ApiProperty({ type: ErrorResponseStatusDto })
+  @ApiProperty({ type: () => ErrorResponseStatusDto })
   Status!: ErrorResponseStatusDto;
 
-  @ApiProperty({ nullable: true, example: null })
+  @ApiProperty({ type: String, nullable: true, example: null, description: 'Always null in error responses.' })
   Parameters!: null;
-}
-
-export class RequestEnvelopeDto<TParameters> {
-  @ApiPropertyOptional({ type: RequestIdentityDto })
-  @IsOptional()
-  @ValidateNested()
-  @IsObject()
-  Identity?: RequestIdentityDto;
-
-  @ApiProperty({ description: 'Endpoint-specific parameters object.' })
-  @IsObject()
-  Parameters!: TParameters;
-}
-
-export class ResponseEnvelopeDto<TParameters> {
-  @ApiProperty({ type: RequestStatusDto })
-  @ValidateNested()
-  Status!: RequestStatusDto;
-
-  @ApiProperty({ nullable: true })
-  Parameters!: TParameters | null;
 }
