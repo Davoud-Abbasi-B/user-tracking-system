@@ -89,11 +89,11 @@ export class EventIngestRequestDto {
   @IsIn(['web', 'android', 'ios', 'backend'])
   platform!: 'web' | 'android' | 'ios' | 'backend';
 
-  @ApiProperty({ type: UserContextDto })
+  @ApiProperty({ type: () => UserContextDto })
   @IsObject()
   user!: UserContextDto;
 
-  @ApiPropertyOptional({ type: AttributionContextDto })
+  @ApiPropertyOptional({ type: () => AttributionContextDto })
   @IsOptional()
   @IsObject()
   attribution?: AttributionContextDto;
@@ -102,20 +102,20 @@ export class EventIngestRequestDto {
   @IsObject()
   parameters!: Record<string, unknown>;
 
-  @ApiPropertyOptional({ type: EventMetadataDto })
+  @ApiPropertyOptional({ type: () => EventMetadataDto })
   @IsOptional()
   @IsObject()
   metadata?: EventMetadataDto;
 }
 
 export class EventEnvelopeRequestDto {
-  @ApiPropertyOptional({ type: RequestIdentityDto })
+  @ApiPropertyOptional({ type: () => RequestIdentityDto })
   @IsOptional()
   @ValidateNested()
   @IsObject()
   Identity?: RequestIdentityDto;
 
-  @ApiProperty({ type: EventIngestRequestDto })
+  @ApiProperty({ type: () => EventIngestRequestDto })
   @ValidateNested()
   @IsObject()
   Parameters!: EventIngestRequestDto;

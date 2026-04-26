@@ -19,9 +19,9 @@ export class EventIngestResponseDto {
 }
 
 export class EventEnvelopeResponseDto {
-  @ApiProperty({ type: EventIngestResponseStatusDto })
+  @ApiProperty({ type: () => EventIngestResponseStatusDto })
   Status!: EventIngestResponseStatusDto;
 
-  @ApiProperty({ type: EventIngestResponseDto })
+  @ApiProperty({ type: () => EventIngestResponseDto })
   Parameters!: EventIngestResponseDto;
 }
