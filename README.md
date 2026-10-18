@@ -1,145 +1,127 @@
 # User Tracking System
 
-NestJS-based tracking collector for Ghabzino-compatible events and user login reporting.
+**A growth analytics and attribution backend for collecting, validating, enriching, and storing product events and user-level acquisition data.**
 
-The system currently supports two separate API responsibilities:
+This project explores a problem I regularly face in growth marketing: **how to connect acquisition sources and campaigns to what users actually do after they arrive**.
 
-- Event collection: receive tracking events, validate them, enrich identity/attribution, and store accepted or invalid payloads.
-- User login reporting: upsert known users during login, preserve first attribution, update last attribution, and increment login count.
+Instead of stopping at ad-platform or client-side reporting, the system provides a backend foundation for collecting behavioral events, preserving attribution context, tracking known-user logins, and preparing data for funnel, lifecycle, and campaign analysis.
 
-## Current Readiness
+## Why I built it
 
-This project is currently ready for local development and functional testing.
+Growth teams often need to answer questions such as:
 
-It is not ready for operational production load yet.
+- Which campaign or source first brought a user?
+- What was the user's most recent attribution?
+- Which users moved from anonymous activity to known-user activity?
+- What events happened after acquisition?
+- Where are users dropping in a product funnel?
+- Which event payloads are invalid or inconsistent?
+- Can marketing and product reporting rely on the same event definitions?
 
-Current status:
+This project was built to explore those questions at the **data-collection layer**, not only inside dashboards.
 
-```text
-Ready for local development: yes
-Ready for local API testing: yes
-Ready for internal testing behind a trusted network: after API auth is enforced
-Ready for operational load: no
-Ready for real public/mobile/web client traffic: no
-```
+It is also part of my **AI-assisted development workflow using OpenAI Codex + VS Code**, where I define the measurement requirements and system behavior, use AI to accelerate implementation, then review, test, debug, and iterate on the result.
 
-You can still run and test everything locally with Docker, Swagger, and PostgreSQL using the setup below.
+## What the system does
 
-## Minimum Work Before Operational Load
+### Event collection
 
-Before connecting real clients or running this service under sustained ingestion load, complete these items:
+The API can:
 
-1. Add real API key authentication.
-2. Add a separate backend API key or trusted path for payment callback events.
-3. Prevent clients from spoofing backend-only fields such as `producer = backend` or `platform = backend`.
-4. Add rate limiting and abuse protection.
-5. Cache `tracking_event_registry` in memory instead of querying it on every event.
-6. Configure PostgreSQL connection pool settings explicitly.
-7. Reduce hot-path database writes or make session/identity upserts optional for phase 1.
-8. Remove or defer heavy JSONB GIN indexes on hot write tables until they are proven necessary.
-9. Add raw payload sensitive-key detection or redaction rules.
-10. Add basic operational metrics for ingest rate, invalid payload rate, DB latency, and registry misses.
-11. Run load tests at 100, 300, and 500 requests per second before rollout.
+- receive product and marketing events
+- validate event names against an event registry
+- validate identity and session requirements
+- preserve attribution data with the event
+- distinguish client-produced and backend-produced events
+- store accepted events
+- store rejected events separately for debugging and data-quality analysis
 
-PostgreSQL can be enough for phase 1, but the ingestion path must be hardened and measured before operational use.
+### User-level attribution
 
-## Stack
+The login-reporting flow maintains a lightweight user snapshot including:
 
-- Backend: NestJS
-- Database: PostgreSQL 16
-- API docs: Swagger/OpenAPI
-- Runtime: Node.js 24
-- Local services: Docker Compose
+- first seen time
+- last login time
+- login count
+- first-touch campaign/source/medium
+- latest campaign/source/medium
+- latest platform
+- latest product
+- latest store/source context
 
-## Prerequisites
+This makes it possible to preserve both **first-touch** and **latest-touch** acquisition context without overwriting the original attribution.
 
-- Node.js portable runtime at `C:\Users\Ayan\node-v24.14.1-win-x64`
-- Docker Desktop
-- Git for Windows
+### Identity & session foundation
 
-For this machine, use this PowerShell path setup before running npm commands:
+The schema includes dedicated structures for:
 
-```powershell
-$env:Path = "C:\Users\Ayan\node-v24.14.1-win-x64;C:\Program Files\Git\cmd;$env:Path"
-```
+- user events
+- sessions
+- identity links
+- known users
+- event definitions
 
-## Local Setup
+The architecture is designed to support a clearer connection between behavioral activity and known-user reporting.
 
-```powershell
-Copy-Item .env.example .env
-npm install
-docker compose up -d postgres
-npm run migration:run
-npm run seed
-npm run start:dev
-```
+## Growth use cases
 
-Swagger:
+From a growth perspective, this type of system can support analysis such as:
 
 ```text
-http://localhost:3000/docs
+Campaign / Source
+       ↓
+Landing / Visit
+       ↓
+Anonymous Activity
+       ↓
+Registration / Login
+       ↓
+Known User
+       ↓
+Product Events
+       ↓
+Conversion / Retention Analysis
 ```
 
-## Environment
+Potential downstream questions include:
 
-Default local configuration:
+- acquisition quality by channel
+- funnel conversion by campaign
+- first-touch vs latest-touch performance
+- activation after signup
+- repeat usage by acquisition cohort
+- event failure/debugging rates
+- user-level lifecycle analysis
+
+## Architecture
 
 ```text
-PORT=3000
-DATABASE_HOST=localhost
-DATABASE_PORT=5433
-DATABASE_USER=tracking
-DATABASE_PASSWORD=tracking
-DATABASE_NAME=tracking
-DATABASE_POOL_MAX=20
-DATABASE_IDLE_TIMEOUT_MS=30000
-DATABASE_CONNECTION_TIMEOUT_MS=2000
-
-API_KEY=dev-tracking-api-key
-BACKEND_API_KEY=dev-backend-api-key
-
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_CLIENT_MAX=10000
-RATE_LIMIT_BACKEND_MAX=30000
-
-TRACKING_SESSION_UPSERT_ENABLED=false
-TRACKING_IDENTITY_LINK_UPSERT_ENABLED=false
-TRACKING_REGISTRY_REFRESH_MS=60000
-TRACKING_RAW_PAYLOAD_MAX_BYTES=131072
+Web / Mobile / Backend
+          ↓
+      Tracking API
+          ↓
+  Validation & Trust Rules
+          ↓
+ Identity / Attribution Enrichment
+          ↓
+      PostgreSQL
+          ↓
+ Analytics / BI / Growth Reporting
 ```
 
-PostgreSQL is exposed on host port `5433` because this machine already has another PostgreSQL service on `5432`.
+## Tech stack
 
-DB connection for DBeaver, DataGrip, or pgAdmin:
+- **NestJS**
+- **TypeScript**
+- **PostgreSQL 16**
+- **Swagger / OpenAPI**
+- **Node.js**
+- **Docker Compose**
+- **Prometheus-style operational metrics**
 
-```text
-Host: localhost
-Port: 5433
-Database: tracking
-Username: tracking
-Password: tracking
-```
+## Core data model
 
-Docker psql login:
-
-```powershell
-docker exec -it tracking_postgres psql -U tracking -d tracking
-```
-
-## Scripts
-
-```powershell
-npm run build
-npm run lint
-npm run migration:run
-npm run seed
-npm run start:dev
-npm run load:test -- 100 30
-```
-
-## Database
-
-Core tables:
+The project currently uses these main tables:
 
 - `tracking_events`
 - `tracking_invalid_events`
@@ -149,94 +131,28 @@ Core tables:
 - `users`
 - `schema_migrations`
 
-Migrations:
+### Event registry
 
-- `001_create_tracking_schema.sql`: event collection schema.
-- `002_create_users_table.sql`: user login reporting schema.
+Valid event names are controlled through `tracking_event_registry`.
 
-The `users` table is intentionally not a full profile table. It stores the user-level login snapshot required for reporting:
+This creates a central event-definition layer so unknown event names can be rejected rather than silently polluting analytics data.
 
-- `user_id`: hashed phone, primary key.
-- `first_seen_at`
-- `last_login_at`
-- `login_count`
-- first attribution fields
-- last attribution fields
-- last platform/product/store fields
+### Invalid-event storage
 
-## Health API
+Rejected events are saved separately in `tracking_invalid_events`.
+
+That makes data-quality problems observable instead of simply dropping malformed requests.
+
+## API overview
+
+### Health
 
 ```text
 GET /api/v1/health
 GET /api/v1/ready
 ```
 
-`/ready` checks the database connection.
-
-These endpoints are public for local and orchestration checks.
-
-## Authentication
-
-All non-health endpoints require an API key:
-
-```http
-x-api-key: dev-tracking-api-key
-```
-
-Backend-only payment callback events require the backend API key:
-
-```http
-x-api-key: dev-backend-api-key
-```
-
-Trust boundary rules:
-
-- Client API keys cannot submit `platform = backend`.
-- Client API keys cannot submit `metadata.producer = backend`.
-- Client API keys cannot submit `metadata.source_of_truth = backend`.
-- `payment_callback_*` events require the backend API key.
-- `payment_callback_*` events require `metadata.idempotency_key`.
-
-## Rate Limiting
-
-The app includes a lightweight in-memory API-key-based rate limiter.
-
-Default local limits:
-
-```text
-RATE_LIMIT_WINDOW_MS=60000
-RATE_LIMIT_CLIENT_MAX=10000
-RATE_LIMIT_BACKEND_MAX=30000
-```
-
-This is enough for local and single-instance phase-1 testing. For multiple app instances, replace it with Redis-backed rate limiting.
-
-## Operational Metrics
-
-```text
-GET /api/v1/metrics
-```
-
-Requires `x-api-key`.
-
-The metrics endpoint returns Prometheus-style text for:
-
-- event ingest totals by status/event
-- event ingest latency
-- registry cache refreshes
-- registry lookup hit/miss
-- user login totals
-- user login latency
-
-Example:
-
-```powershell
-Invoke-RestMethod `
-  -Uri "http://localhost:3000/api/v1/metrics" `
-  -Headers @{ "x-api-key" = "dev-tracking-api-key" }
-```
-
-## Event Ingestion API
+### Event ingestion
 
 ```text
 POST /api/v1/events
@@ -246,26 +162,24 @@ Example:
 
 ```json
 {
-  "event_name": "start_WBI_fail",
+  "event_name": "checkout_started",
   "event_time": "2026-04-15T10:00:00Z",
-  "product_name": "ghabzino",
+  "product_name": "sample_product",
   "platform": "web",
   "user": {
-    "user_id": "hashed_phone_value",
+    "user_id": "hashed_user_id",
     "anonymous_id": "anon_123",
     "session_id": "sess_456"
   },
   "attribution": {
-    "campaign_name": "organic",
+    "campaign_name": "spring_campaign",
     "source": "google",
-    "medium": null,
+    "medium": "cpc",
     "referer": "google.com",
     "attribution_source_type": "referrer"
   },
   "parameters": {
-    "Product": "waterbillinquiry",
-    "message": "service unavailable",
-    "error_code": "GXXXX"
+    "plan": "standard"
   },
   "metadata": {
     "producer": "client",
@@ -275,50 +189,29 @@ Example:
 }
 ```
 
-Success response:
+Successful events return an event ID, validation status, and receive timestamp.
 
-```json
-{
-  "success": true,
-  "event_id": "evt_...",
-  "validation_status": "valid",
-  "received_at": "2026-04-15T10:00:00.000Z"
-}
-```
-
-Important validation behavior:
-
-- `event_name` must exist in `tracking_event_registry`.
-- Unknown parameters are allowed.
-- Client events require `session_id`.
-- Every event requires at least `user.user_id` or `user.anonymous_id`.
-- Accepted events are stored in `tracking_events`.
-- Rejected events are stored in `tracking_invalid_events`.
-- `payment_callback_*` events must come from backend.
-
-## User Login Reporting API
+### User login reporting
 
 ```text
 POST /api/v1/users/login
 ```
 
-This API is separate from event ingestion. It is not a behavior event. It updates the user-level login snapshot in `users`.
+This endpoint is intentionally separate from behavioral event ingestion. It maintains a user-level login and attribution snapshot.
 
 Example:
 
 ```json
 {
-  "user_id": "hashed_phone_value",
-  "product_name": "ghabzino",
+  "user_id": "hashed_user_id",
+  "product_name": "sample_product",
   "platform": "android",
   "login_time": "2026-04-20T10:25:00Z",
   "attribution": {
-    "campaign_name": "Esfand1404_newservice_promotion",
-    "source": "yektanet",
-    "medium": "banner",
-    "referer": null,
-    "landing_page": null,
-    "store": "cafebazaar"
+    "campaign_name": "remarketing_campaign",
+    "source": "paid_media",
+    "medium": "display",
+    "store": "android_store"
   },
   "metadata": {
     "schema_version": "1.0",
@@ -327,201 +220,159 @@ Example:
 }
 ```
 
-Created response:
+For an existing user, the service preserves the original attribution while updating the latest attribution and login count.
 
-```json
-{
-  "success": true,
-  "user_id": "hashed_phone_value",
-  "action": "created",
-  "last_login_at": "2026-04-20T10:25:00.000Z",
-  "login_count": 1
-}
-```
+## Trust boundaries
 
-Updated response:
+Non-health endpoints use API-key authentication.
 
-```json
-{
-  "success": true,
-  "user_id": "hashed_phone_value",
-  "action": "updated",
-  "last_login_at": "2026-04-20T10:25:00.000Z",
-  "login_count": 2
-}
-```
+The project also distinguishes normal client events from backend-only events.
 
-Validation rules:
+Current trust rules include:
 
-- `user_id` is required and must be a non-empty string.
-- `product_name` is required.
-- `platform` must be one of `web`, `android`, `ios`, `backend`.
-- `login_time` is required and must be a valid datetime.
-- `attribution`, when present, must be an object.
+- client credentials cannot impersonate backend producers
+- backend-only event families require separate credentials
+- backend callback events require an idempotency key
+- event identity and session requirements are validated before acceptance
 
-Upsert behavior:
+These controls are useful when analytics includes both client-side behavior and server-side conversion events.
 
-- New user:
-  - `first_seen_at = login_time`
-  - `last_login_at = login_time`
-  - `login_count = 1`
-  - first attribution and last attribution are both set from this login.
-- Existing user:
-  - `last_login_at = login_time`
-  - `login_count = login_count + 1`
-  - first attribution remains unchanged.
-  - last attribution is updated from this login.
+## Operational visibility
 
-## Testing With PowerShell
-
-Health:
-
-```powershell
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/health" -Method Get
-Invoke-RestMethod -Uri "http://localhost:3000/api/v1/ready" -Method Get
-```
-
-User login:
-
-```powershell
-$body = @{
-  user_id = "hashed_phone_value"
-  product_name = "ghabzino"
-  platform = "android"
-  login_time = "2026-04-20T10:25:00Z"
-  attribution = @{
-    campaign_name = "Esfand1404_newservice_promotion"
-    source = "yektanet"
-    medium = "banner"
-    referer = $null
-    landing_page = $null
-    store = "cafebazaar"
-  }
-  metadata = @{
-    schema_version = "1.0"
-    trace_id = "trace_login_001"
-  }
-} | ConvertTo-Json -Depth 8
-
-Invoke-RestMethod `
-  -Uri "http://localhost:3000/api/v1/users/login" `
-  -Method Post `
-  -Body $body `
-  -ContentType "application/json" `
-  -Headers @{ "x-api-key" = "dev-tracking-api-key" }
-```
-
-## Local Load Testing
-
-The repository includes a basic no-dependency load-test script:
-
-```powershell
-npm run load:test -- 100 30
-npm run load:test -- 300 30
-npm run load:test -- 500 30
-```
-
-Arguments:
+The service exposes a metrics endpoint:
 
 ```text
-npm run load:test -- <requests_per_second> <duration_seconds>
+GET /api/v1/metrics
 ```
 
-The script sends valid `POST /api/v1/events` requests with `x-api-key`.
+Metrics currently cover:
 
-Before testing, make sure:
+- event ingest totals
+- valid vs invalid event counts
+- ingest latency
+- registry cache activity
+- registry hit/miss behavior
+- user-login totals
+- login-processing latency
 
-```powershell
+The goal is to make the tracking system itself measurable rather than assuming that data collection is always healthy.
+
+## Local setup
+
+Prerequisites:
+
+- Node.js
+- Docker
+- npm
+
+Create the environment file:
+
+```bash
+cp .env.example .env
+```
+
+Install dependencies and start PostgreSQL:
+
+```bash
+npm install
 docker compose up -d postgres
 npm run migration:run
 npm run seed
 npm run start:dev
 ```
 
-Interpretation:
+Swagger is available locally at:
 
-- `100` req/sec: basic steady-state check.
-- `300` req/sec: expected peak lower bound.
-- `500` req/sec: expected burst upper bound.
-
-Do not treat local laptop load-test results as production capacity. Use them to catch obvious bottlenecks and regressions before testing on staging-like infrastructure.
-
-## Useful SQL
-
-Recent events:
-
-```sql
-SELECT
-  event_id,
-  event_name,
-  platform,
-  user_id,
-  anonymous_id,
-  session_id,
-  validation_status,
-  received_at
-FROM tracking_events
-ORDER BY received_at DESC;
+```text
+http://localhost:3000/docs
 ```
 
-Invalid events:
+## Useful commands
 
-```sql
-SELECT
-  event_name,
-  error_code,
-  error_message,
-  validation_errors,
-  received_at,
-  raw_payload
-FROM tracking_invalid_events
-ORDER BY received_at DESC;
+```bash
+npm run build
+npm run lint
+npm run migration:run
+npm run seed
+npm run start:dev
 ```
 
-Known users:
+A basic local load-test script is also included:
 
-```sql
-SELECT
-  user_id,
-  first_seen_at,
-  last_login_at,
-  login_count,
-  first_campaign_name,
-  first_source,
-  first_medium,
-  last_campaign_name,
-  last_source,
-  last_medium,
-  last_platform,
-  last_product_name,
-  last_store
-FROM users
-ORDER BY last_login_at DESC;
+```bash
+npm run load:test -- 100 30
+npm run load:test -- 300 30
+npm run load:test -- 500 30
 ```
 
-Join known users to events:
+The arguments are:
 
-```sql
-SELECT
-  u.user_id,
-  u.login_count,
-  u.first_seen_at,
-  u.last_login_at,
-  e.event_name,
-  e.platform,
-  e.received_at
-FROM users u
-LEFT JOIN tracking_events e ON e.user_id = u.user_id
-ORDER BY u.last_login_at DESC, e.received_at DESC;
+```text
+npm run load:test -- <requests_per_second> <duration_seconds>
 ```
 
-## GitHub
+Local load-test results should be treated as development diagnostics, not production-capacity benchmarks.
 
-This folder is already initialized as a Git repository on branch `main`.
+## Project status
 
-To connect it to a new GitHub repository:
+This repository is a **working development and functional-testing implementation**, not a claim of production-scale infrastructure.
 
-```powershell
-& "C:\Program Files\Git\cmd\git.exe" remote add origin https://github.com/YOUR_USERNAME/user-tracking-system.git
-& "C:\Program Files\Git\cmd\git.exe" push -u origin main
+Before exposing a tracking collector like this to sustained real-world traffic, I would validate and harden areas such as:
+
+- distributed rate limiting
+- secret management
+- sensitive-payload redaction
+- database connection/pooling strategy
+- hot-path write volume
+- observability and alerting
+- staging-scale load testing
+- multi-instance behavior
+- retention and data-governance policies
+
+Keeping this distinction explicit is important: tracking infrastructure affects marketing decisions, so reliability and data quality matter as much as event volume.
+
+## AI-assisted development
+
+I built and iterated this project using **OpenAI Codex + VS Code**.
+
+My workflow included:
+
+1. Defining the measurement and attribution requirements
+2. Translating growth questions into data and API requirements
+3. Designing event, identity, attribution, and user-reporting flows
+4. Using AI-assisted coding to accelerate implementation
+5. Reviewing and debugging generated changes
+6. Testing APIs locally with PostgreSQL and Swagger
+7. Identifying operational risks and hardening requirements
+8. Iterating on data quality, security boundaries, and observability
+
+This project is a practical example of how I combine **growth marketing, analytics thinking, and hands-on AI-assisted building**.
+
+## Portfolio context
+
+My core background is growth and performance marketing, not backend engineering.
+
+I built this system because I wanted deeper control over a part of growth that is often treated as a black box: **tracking, attribution, identity, and conversion data collection**.
+
+It demonstrates how I approach growth problems end to end:
+
+```text
+Business question
+      ↓
+Measurement design
+      ↓
+Tracking architecture
+      ↓
+Data collection
+      ↓
+Validation
+      ↓
+Analysis-ready data
+      ↓
+Growth decision
 ```
+
+---
+
+Built by **Davoud Abbasi**  
+Growth marketer & AI-assisted product builder
